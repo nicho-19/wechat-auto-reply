@@ -4,9 +4,46 @@ from wechat_auto_reply.safety import SafetyPolicy, build_message_key
 from wechat_auto_reply.state import RuntimeState
 
 
+def test_runtime_state_load_save_round_trip(tmp_path):
+    state = RuntimeState.empty()
+    message_key = build_message_key("张三", "你好")
+    state.processed_message_keys.add(message_key)
+    state.last_reply_at_by_chat["张三"] = 1000
+    state.reply_count_by_day["1970-01-01"] = 2
+
+    state_path = tmp_path / "runtime_state.json"
+    state.save(state_path)
+
+    loaded = RuntimeState.load(state_path)
+
+    assert loaded.processed_message_keys == {message_key}
+    assert loaded.last_reply_at_by_chat == {"张三": 1000}
+    assert loaded.reply_count_by_day == {"1970-01-01": 2}
+
+
 def test_message_key_is_stable():
     assert build_message_key("张三", "你好") == build_message_key("张三", "你好")
     assert build_message_key("张三", "你好") != build_message_key("李四", "你好")
+
+
+def test_allows_safe_message():
+    policy = SafetyPolicy(whitelist=["张三"], cooldown_seconds=60, max_replies_per_day=10)
+    state = RuntimeState.empty()
+
+    decision = policy.can_reply("张三", "你好", now_ts=1000, state=state, paused=False)
+
+    assert decision.allowed is True
+    assert decision.reason == "allowed"
+
+
+def test_blocks_when_paused():
+    policy = SafetyPolicy(whitelist=["张三"], cooldown_seconds=60, max_replies_per_day=10)
+    state = RuntimeState.empty()
+
+    decision = policy.can_reply("张三", "你好", now_ts=1000, state=state, paused=True)
+
+    assert decision.allowed is False
+    assert decision.reason == "paused"
 
 
 def test_blocks_non_whitelisted_chat():
