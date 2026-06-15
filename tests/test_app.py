@@ -58,6 +58,11 @@ class StopLoop(Exception):
     pass
 
 
+class FailingPollWeChatClient(DryRunWeChatClient):
+    def get_latest_incoming_messages(self) -> list[IncomingMessage]:
+        raise RuntimeError("wechat unavailable")
+
+
 def make_config(*, dry_run: bool, whitelist: list[str] | None = None) -> AppConfig:
     return AppConfig(
         dry_run=dry_run,
@@ -105,6 +110,25 @@ def test_run_app_default_repeats_and_sleeps_between_cycles() -> None:
 
     assert app.calls == 3
     assert sleeps == [7, 7]
+
+
+def test_build_wechat_client_allows_dry_run_only() -> None:
+    cli = load_cli_module()
+
+    client = cli.build_wechat_client(make_config(dry_run=True))
+
+    assert isinstance(client, DryRunWeChatClient)
+
+
+def test_build_wechat_client_rejects_live_mode_until_desktop_client_exists() -> None:
+    cli = load_cli_module()
+
+    try:
+        cli.build_wechat_client(make_config(dry_run=False))
+    except cli.UnsupportedLiveWeChatError as exc:
+        assert "dry_run" in str(exc)
+    else:
+        raise AssertionError("live mode should be rejected until a desktop client exists")
 
 
 def test_dry_run_logs_reply_and_does_not_send(tmp_path: Path) -> None:
@@ -191,14 +215,35 @@ def test_successful_reply_state_is_saved_before_later_message_failure(tmp_path: 
         paths=paths,
     )
 
-    try:
-        app.run_once()
-    except RuntimeError as exc:
-        assert str(exc) == "boom"
-    else:
-        raise AssertionError("second message should fail")
+    app.run_once()
 
     state = RuntimeState.load(paths.state_file)
     assert build_message_key("Alice", "first") in state.processed_message_keys
+    assert build_message_key("Bob", "second") not in state.processed_message_keys
     assert state.last_reply_at_by_chat["Alice"] > 0
     assert sum(state.reply_count_by_day.values()) == 1
+    events = read_events(paths.log_file)
+    assert [event["event"] for event in events] == ["reply_sent", "reply_error"]
+    assert events[1]["chat_name"] == "Bob"
+    assert events[1]["message"] == "second"
+    assert events[1]["error"] == "boom"
+
+
+def test_poll_error_is_logged_without_calling_reply_engine(tmp_path: Path) -> None:
+    paths = make_paths(tmp_path)
+    wechat = FailingPollWeChatClient()
+    reply_engine = FakeReplyEngine()
+    app = AutoReplyApp(
+        config=make_config(dry_run=False),
+        wechat=wechat,
+        reply_engine=reply_engine,
+        paths=paths,
+    )
+
+    app.run_once()
+
+    assert reply_engine.calls == []
+    events = read_events(paths.log_file)
+    assert events[0]["event"] == "poll_error"
+    assert events[0]["error"] == "wechat unavailable"
+    assert RuntimeState.load(paths.state_file) == RuntimeState.empty()

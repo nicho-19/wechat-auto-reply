@@ -2,7 +2,7 @@
 
 Windows local tool for a safe WeChat Desktop auto-reply assistant.
 
-Current status: first implementation scaffold.
+Current status: first implementation scaffold. The current CLI supports safe dry-run orchestration only; live WeChat Desktop message reading/sending is the next integration step.
 
 The current WeChat client integration is a dry-run/stub boundary; real WeChat Desktop automation is the next integration step.
 
@@ -31,6 +31,8 @@ python .\wechat_auto_reply.py --config config.yaml --once
 ```
 
 By default, `dry_run` is `true`, so the program logs proposed replies without sending.
+
+Do not set `dry_run` to `false` yet. The CLI will refuse live mode until a real WeChat Desktop UI automation client is added.
 
 ## Pause
 

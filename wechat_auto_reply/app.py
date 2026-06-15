@@ -48,7 +48,14 @@ class AutoReplyApp:
         paused = self.paths.pause_file.exists()
         now_ts = int(time.time())
 
-        for message in self.wechat.get_latest_incoming_messages():
+        try:
+            messages = self.wechat.get_latest_incoming_messages()
+        except Exception as exc:
+            self.logger.write("poll_error", {"error": str(exc)})
+            state.save(self.paths.state_file)
+            return
+
+        for message in messages:
             decision = self.policy.can_reply(message.chat_name, message.text, now_ts, state, paused)
             if not decision.allowed:
                 self.logger.write(
@@ -57,22 +64,29 @@ class AutoReplyApp:
                 )
                 continue
 
-            reply = self.reply_engine.generate_reply(message.chat_name, message.text)
-            if self.config.dry_run:
-                self.logger.write(
-                    "reply_dry_run",
-                    {"chat_name": message.chat_name, "message": message.text, "reply": reply},
-                )
-            else:
-                self.wechat.send_reply(message.chat_name, reply)
+            try:
+                reply = self.reply_engine.generate_reply(message.chat_name, message.text)
+                if self.config.dry_run:
+                    self.logger.write(
+                        "reply_dry_run",
+                        {"chat_name": message.chat_name, "message": message.text, "reply": reply},
+                    )
+                else:
+                    self.wechat.send_reply(message.chat_name, reply)
+                    self.policy.record_reply(message.chat_name, message.text, now_ts, state)
+                    state.save(self.paths.state_file)
+                    self.logger.write(
+                        "reply_sent",
+                        {"chat_name": message.chat_name, "message": message.text, "reply": reply},
+                    )
+                    continue
                 self.policy.record_reply(message.chat_name, message.text, now_ts, state)
                 state.save(self.paths.state_file)
+            except Exception as exc:
                 self.logger.write(
-                    "reply_sent",
-                    {"chat_name": message.chat_name, "message": message.text, "reply": reply},
+                    "reply_error",
+                    {"chat_name": message.chat_name, "message": message.text, "error": str(exc)},
                 )
-                continue
-            self.policy.record_reply(message.chat_name, message.text, now_ts, state)
-            state.save(self.paths.state_file)
+                state.save(self.paths.state_file)
 
         state.save(self.paths.state_file)
