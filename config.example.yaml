@@ -1,0 +1,11 @@
+dry_run: true
+poll_interval_seconds: 3
+cooldown_seconds: 60
+max_replies_per_day: 20
+whitelist:
+  - 文件传输助手
+ai:
+  base_url: https://api.openai.com/v1
+  model: gpt-4.1-mini
+  api_key_env: OPENAI_API_KEY
+reply_style: 回复必须使用中文，简短、礼貌、像真人微信回复；不确定时说稍后确认，不编造事实。
