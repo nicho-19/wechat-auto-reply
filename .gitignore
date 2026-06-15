@@ -1,0 +1,8 @@
+config.yaml
+.env
+pause.flag
+logs/
+__pycache__/
+.venv/
+venv/
+*.pyc
