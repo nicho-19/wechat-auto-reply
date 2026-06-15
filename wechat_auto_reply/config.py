@@ -41,8 +41,14 @@ def _require_str(value: Any, name: str) -> str:
     return value.strip()
 
 
+def _require_bool(value: Any, name: str) -> bool:
+    if not isinstance(value, bool):
+        raise ConfigError(f"{name} must be a boolean")
+    return value
+
+
 def _require_int(value: Any, name: str, minimum: int) -> int:
-    if not isinstance(value, int) or value < minimum:
+    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
         raise ConfigError(f"{name} must be an integer >= {minimum}")
     return value
 
@@ -61,7 +67,7 @@ def load_config(path: str | Path) -> AppConfig:
         raise ConfigError("whitelist must be a list of strings")
 
     return AppConfig(
-        dry_run=bool(data.get("dry_run", True)),
+        dry_run=True if "dry_run" not in data else _require_bool(data.get("dry_run"), "dry_run"),
         poll_interval_seconds=_require_int(data.get("poll_interval_seconds"), "poll_interval_seconds", 1),
         cooldown_seconds=_require_int(data.get("cooldown_seconds"), "cooldown_seconds", 1),
         max_replies_per_day=_require_int(data.get("max_replies_per_day"), "max_replies_per_day", 1),
