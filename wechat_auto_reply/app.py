@@ -3,10 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import time
+from typing import Protocol
 
 from .config import AppConfig
 from .logging_utils import JsonlLogger
-from .reply_engine import AIReplyEngine
 from .safety import SafetyPolicy
 from .state import RuntimeState
 from .wechat_ui import WeChatClient
@@ -19,12 +19,17 @@ class AppPaths:
     pause_file: Path = Path("pause.flag")
 
 
+class ReplyEngine(Protocol):
+    def generate_reply(self, chat_name: str, incoming_message: str) -> str:
+        ...
+
+
 class AutoReplyApp:
     def __init__(
         self,
         config: AppConfig,
         wechat: WeChatClient,
-        reply_engine: AIReplyEngine,
+        reply_engine: ReplyEngine,
         paths: AppPaths = AppPaths(),
     ) -> None:
         self.config = config

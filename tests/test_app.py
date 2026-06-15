@@ -1,11 +1,23 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
+from types import ModuleType
 
 from wechat_auto_reply.app import AppPaths, AutoReplyApp
 from wechat_auto_reply.config import AIConfig, AppConfig
 from wechat_auto_reply.wechat_ui import DryRunWeChatClient, IncomingMessage
+
+
+def load_cli_module() -> ModuleType:
+    module_path = Path(__file__).parents[1] / "wechat_auto_reply.py"
+    spec = importlib.util.spec_from_file_location("wechat_auto_reply_cli", module_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 class FakeReplyEngine:
@@ -16,6 +28,21 @@ class FakeReplyEngine:
     def generate_reply(self, chat_name: str, incoming_message: str) -> str:
         self.calls.append((chat_name, incoming_message))
         return self.reply
+
+
+class FakeLoopApp:
+    def __init__(self, stop_after: int | None = None) -> None:
+        self.stop_after = stop_after
+        self.calls = 0
+
+    def run_once(self) -> None:
+        self.calls += 1
+        if self.stop_after is not None and self.calls > self.stop_after:
+            raise StopLoop
+
+
+class StopLoop(Exception):
+    pass
 
 
 def make_config(*, dry_run: bool, whitelist: list[str] | None = None) -> AppConfig:
@@ -42,6 +69,31 @@ def read_events(path: Path) -> list[dict[str, object]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
 
+def test_run_app_once_runs_single_cycle_without_sleeping() -> None:
+    cli = load_cli_module()
+    app = FakeLoopApp()
+    sleeps: list[int] = []
+
+    cli.run_app(app, poll_interval_seconds=5, once=True, sleep=sleeps.append)
+
+    assert app.calls == 1
+    assert sleeps == []
+
+
+def test_run_app_default_repeats_and_sleeps_between_cycles() -> None:
+    cli = load_cli_module()
+    app = FakeLoopApp(stop_after=2)
+    sleeps: list[int] = []
+
+    try:
+        cli.run_app(app, poll_interval_seconds=7, once=False, sleep=sleeps.append)
+    except StopLoop:
+        pass
+
+    assert app.calls == 3
+    assert sleeps == [7, 7]
+
+
 def test_dry_run_logs_reply_and_does_not_send(tmp_path: Path) -> None:
     paths = make_paths(tmp_path)
     wechat = DryRunWeChatClient([IncomingMessage(chat_name="Alice", text="Are you there?")])
@@ -49,7 +101,7 @@ def test_dry_run_logs_reply_and_does_not_send(tmp_path: Path) -> None:
     app = AutoReplyApp(
         config=make_config(dry_run=True),
         wechat=wechat,
-        reply_engine=reply_engine,  # type: ignore[arg-type]
+        reply_engine=reply_engine,
         paths=paths,
     )
 
@@ -76,7 +128,7 @@ def test_non_whitelisted_chat_logs_skipped_and_does_not_call_reply_engine(tmp_pa
     app = AutoReplyApp(
         config=make_config(dry_run=True, whitelist=["Alice"]),
         wechat=wechat,
-        reply_engine=reply_engine,  # type: ignore[arg-type]
+        reply_engine=reply_engine,
         paths=paths,
     )
 
@@ -98,7 +150,7 @@ def test_non_dry_run_sends_reply_and_logs_sent(tmp_path: Path) -> None:
     app = AutoReplyApp(
         config=make_config(dry_run=False),
         wechat=wechat,
-        reply_engine=reply_engine,  # type: ignore[arg-type]
+        reply_engine=reply_engine,
         paths=paths,
     )
 
