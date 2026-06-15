@@ -1,8 +1,10 @@
 # WeChat Auto Reply
 
-Windows local tool design for a safe WeChat Desktop auto-reply assistant.
+Windows local tool for a safe WeChat Desktop auto-reply assistant.
 
-Current status: design/spec stage.
+Current status: first implementation scaffold.
+
+The current WeChat client integration is a dry-run/stub boundary; real WeChat Desktop automation is the next integration step.
 
 ## Safety Goals
 
@@ -12,9 +14,39 @@ Current status: design/spec stage.
 - Log generated replies and send results locally.
 - Avoid unofficial WeChat protocols.
 
+## Setup
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+Copy-Item config.example.yaml config.yaml
+```
+
+Edit `config.yaml`, then set the API key environment variable named by `ai.api_key_env`.
+
+```powershell
+$env:OPENAI_API_KEY = "your_api_key"
+python .\wechat_auto_reply.py --config config.yaml --once
+```
+
+By default, `dry_run` is `true`, so the program logs proposed replies without sending.
+
+## Pause
+
+Create a file named `pause.flag` in the project root to pause automatic sending.
+
+```powershell
+New-Item pause.flag -ItemType File
+```
+
+Delete that single file when you want to resume.
+
+```powershell
+Remove-Item "pause.flag"
+```
+
 ## Design
 
-See the design document:
-
 - `docs/superpowers/specs/2026-06-15-wechat-auto-reply-design.md`
-
+- `docs/superpowers/plans/2026-06-15-wechat-auto-reply.md`

@@ -929,7 +929,7 @@ Expected: commit succeeds.
 **Files:**
 - Modify: `README.md`
 
-- [ ] **Step 1: Update README with setup and safety instructions**
+- [x] **Step 1: Update README with setup and safety instructions**
 
 Replace `README.md` with:
 
@@ -986,7 +986,7 @@ Remove-Item "pause.flag"
 - `docs/superpowers/plans/2026-06-15-wechat-auto-reply.md`
 ```
 
-- [ ] **Step 2: Run all tests**
+- [x] **Step 2: Run all tests**
 
 Run:
 
