@@ -11,6 +11,11 @@ class JsonlLogger:
         self.path = Path(path)
 
     def write(self, event: str, fields: dict[str, Any]) -> None:
+        reserved_fields = {"event", "ts"} & fields.keys()
+        if reserved_fields:
+            reserved = ", ".join(sorted(reserved_fields))
+            raise ValueError(f"fields contain reserved JSONL metadata keys: {reserved}")
+
         self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "ts": datetime.now(timezone.utc).isoformat(),
