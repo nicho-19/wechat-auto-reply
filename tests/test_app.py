@@ -7,6 +7,8 @@ from types import ModuleType
 
 from wechat_auto_reply.app import AppPaths, AutoReplyApp
 from wechat_auto_reply.config import AIConfig, AppConfig
+from wechat_auto_reply.safety import build_message_key
+from wechat_auto_reply.state import RuntimeState
 from wechat_auto_reply.wechat_ui import DryRunWeChatClient, IncomingMessage
 
 
@@ -28,6 +30,17 @@ class FakeReplyEngine:
     def generate_reply(self, chat_name: str, incoming_message: str) -> str:
         self.calls.append((chat_name, incoming_message))
         return self.reply
+
+
+class FailingSecondReplyEngine:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+
+    def generate_reply(self, chat_name: str, incoming_message: str) -> str:
+        self.calls.append((chat_name, incoming_message))
+        if len(self.calls) == 2:
+            raise RuntimeError("boom")
+        return "first reply"
 
 
 class FakeLoopApp:
@@ -163,3 +176,29 @@ def test_non_dry_run_sends_reply_and_logs_sent(tmp_path: Path) -> None:
     assert event["chat_name"] == "Alice"
     assert event["message"] == "See you tomorrow"
     assert event["reply"] == "See you tomorrow"
+
+
+def test_successful_reply_state_is_saved_before_later_message_failure(tmp_path: Path) -> None:
+    paths = make_paths(tmp_path)
+    first = IncomingMessage(chat_name="Alice", text="first")
+    second = IncomingMessage(chat_name="Bob", text="second")
+    wechat = DryRunWeChatClient([first, second])
+    reply_engine = FailingSecondReplyEngine()
+    app = AutoReplyApp(
+        config=make_config(dry_run=False, whitelist=["Alice", "Bob"]),
+        wechat=wechat,
+        reply_engine=reply_engine,
+        paths=paths,
+    )
+
+    try:
+        app.run_once()
+    except RuntimeError as exc:
+        assert str(exc) == "boom"
+    else:
+        raise AssertionError("second message should fail")
+
+    state = RuntimeState.load(paths.state_file)
+    assert build_message_key("Alice", "first") in state.processed_message_keys
+    assert state.last_reply_at_by_chat["Alice"] > 0
+    assert sum(state.reply_count_by_day.values()) == 1

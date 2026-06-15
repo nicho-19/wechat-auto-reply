@@ -65,10 +65,14 @@ class AutoReplyApp:
                 )
             else:
                 self.wechat.send_reply(message.chat_name, reply)
+                self.policy.record_reply(message.chat_name, message.text, now_ts, state)
+                state.save(self.paths.state_file)
                 self.logger.write(
                     "reply_sent",
                     {"chat_name": message.chat_name, "message": message.text, "reply": reply},
                 )
+                continue
             self.policy.record_reply(message.chat_name, message.text, now_ts, state)
+            state.save(self.paths.state_file)
 
         state.save(self.paths.state_file)
